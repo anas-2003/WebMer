@@ -1,0 +1,8 @@
+aiohttp
+beautifulsoup4
+builtwith
+colorama
+lxml
+numpy
+PyYAML
+dnspython
