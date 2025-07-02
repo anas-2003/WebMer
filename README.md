@@ -1,4 +1,4 @@
-# Project Prometheus (WebMer v2.0)
+# Project (WebMer v2.0)
 
 <div align="center">
 
