@@ -6,7 +6,7 @@ with open('requirements.txt') as f:
 
 setup(
     name='webmer',
-    version='5.0.0',
+    version='2.0.0',
     author='Anas Erami',
     author_email='anaserami17@gmail.com', 
     description='An Advanced, AI-Driven Offensive Security Platform for Web Applications & APIs.',
