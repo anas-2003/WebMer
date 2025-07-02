@@ -1604,5 +1604,15 @@ async def main():
         
         print(Fore.GREEN + f"\n[+] Total vulnerabilities found across all targets: {len(all_vulnerabilities)}")
 
+
+def main_entry():
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n{Fore.RED}[!] Scan interrupted by user.")
+    except Exception as e:
+        print(f"\n{Fore.RED}[!] A critical error occurred in main: {e}")
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main_entry()
