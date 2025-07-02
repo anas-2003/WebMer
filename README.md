@@ -1,4 +1,4 @@
-# Project Prometheus (WebMer v5.0)
+# Project Prometheus (WebMer v2.0)
 
 <div align="center">
 
@@ -74,7 +74,7 @@ Getting Prometheus ready is straightforward.
 
 1.  **Clone the Repository:**
     ```sh
-    git clone https://github.com/your-username/prometheus.git
+    git clone https://github.com/anas-2003/WebMer.git
     cd WebMer
     ```
 
@@ -129,4 +129,4 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 Anas Erami - [Your-Email@example.com]
 
-Project Link: [https://github.com/your-username/prometheus](https://github.com/your-username/prometheus)
+Project Link: [https://github.com/anas-2003/WebMer.git](https://github.com/anas-2003/WebMer.git)
