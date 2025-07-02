@@ -1605,14 +1605,15 @@ async def main():
         print(Fore.GREEN + f"\n[+] Total vulnerabilities found across all targets: {len(all_vulnerabilities)}")
 
 
-def main_entry():
+def entry_point():
+    """The synchronous entry point for the command line."""
     try:
+        
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n{Fore.RED}[!] Scan interrupted by user.")
+        print(f"\n{Fore.RED}[!] Scan interrupted by user.")
     except Exception as e:
-        print(f"\n{Fore.RED}[!] A critical error occurred in main: {e}")
-
+        print(f"\n{Fore.RED}[!] A critical top-level error occurred: {e}")
 
 if __name__ == "__main__":
-    main_entry()
+    entry_point()
