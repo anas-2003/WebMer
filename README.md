@@ -127,6 +127,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## Contact
 
-Anas Erami - [Your-Email@example.com]
+Anas Erami - [anaserami17@gmail.com]
 
 Project Link: [https://github.com/anas-2003/WebMer.git](https://github.com/anas-2003/WebMer.git)
