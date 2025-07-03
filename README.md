@@ -785,35 +785,6 @@ The developer, **Anas Erami**, assumes **NO LIABILITY** for:
 
 **Use this tool ethically, responsibly, and legally.**
 
----
-
-## 🤝 Contributing
-
-We welcome contributions from the cybersecurity community!
-
-### **🔧 Development Areas**
-- New attack modules and techniques
-- AI/ML algorithm improvements
-- Evasion technique development
-- Performance optimizations
-- Documentation enhancements
-
-### **📝 Contribution Process**
-1. Fork the repository
-2. Create a feature branch
-3. Implement your changes
-4. Add comprehensive tests
-5. Update documentation
-6. Submit a pull request
-
-### **🎯 Development Guidelines**
-- Follow Python PEP 8 style guidelines
-- Include docstrings and type hints
-- Maintain backward compatibility
-- Add configuration options for new features
-- Ensure ethical use considerations
-
----
 
 ## 📞 Support & Help
 
@@ -837,67 +808,7 @@ webmer --debug --url "problematic-url" 2> error.log
 - [FAQ](https://github.com/anas-2003/WebMer/wiki/FAQ)
 - [Video Tutorials](https://github.com/anas-2003/WebMer/wiki/Video-Tutorials)
 
-### **🔒 Security Vulnerabilities**
-Report security issues privately to: [anaserami17@gmail.com](mailto:anaserami17@gmail.com)
 
----
-
-## 📜 License
-
-Distributed under the **MIT License**. See `LICENSE` file for more information.
-
----
-
-<div align="center">
-
-**🎯 Made with ❤️ for Professional Cybersecurity**
-
-*"With great power comes great responsibility"*
-
-**🔥 WebMer v5.0 - Project Prometheus 🔥**  
-*The Future of Penetration Testing is Here*
-
-</div>
-
----
-
-## ⚠️ **CRITICAL LEGAL DISCLAIMER**
-
-### 🚨 **AUTHORIZED USE ONLY**
-
-**WebMer v5.0 "Project Prometheus"** is an extremely powerful offensive security platform designed for:
-
-✅ **AUTHORIZED ACTIVITIES**
-- Penetration testing with explicit written permission
-- Security research in controlled environments
-- Educational purposes in isolated lab environments
-- Bug bounty programs with proper authorization
-- Internal security assessments by authorized personnel
-
-❌ **PROHIBITED ACTIVITIES**
-- Unauthorized access to systems you don't own
-- Testing against production systems without permission
-- Malicious attacks or cybercrime
-- Any illegal or unethical activities
-
-### ⚖️ **Legal Responsibility**
-
-- **YOU** are solely responsible for all actions taken with this tool
-- **YOU** must ensure you have proper authorization before testing
-- **YOU** must comply with all applicable laws and regulations
-- **YOU** must respect responsible disclosure practices
-
-### 🛡️ **Developer Liability**
-
-The developer, **Anas Erami**, assumes **NO LIABILITY** for:
-- Misuse of this tool
-- Damage caused by unauthorized testing
-- Legal consequences of improper use
-- Any violations of applicable laws
-
-**Use this tool ethically, responsibly, and legally.**
-
----
 
 ## 🤝 Contributing
 
