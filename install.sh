@@ -336,38 +336,38 @@ verify_installation() {
 show_final_instructions() {
     echo
     echo -e "${GREEN}======================================================================${NC}"
-    echo -e "${CYAN}🎉 WebMer v5.0 Installation Complete! 🎉${NC}"
+    echo -e "${CYAN} WebMer v5.0 Installation Complete! ${NC}"
     echo -e "${GREEN}======================================================================${NC}"
     echo
-    echo -e "${YELLOW}📋 Installation Summary:${NC}"
+    echo -e "${YELLOW}Installation Summary:${NC}"
     echo -e "   ✓ Installed to: ${CYAN}$INSTALL_DIR${NC}"
     echo -e "   ✓ System command: ${CYAN}$SYMLINK_PATH${NC}"
     echo -e "   ✓ Virtual environment: ${CYAN}$VENV_DIR${NC}"
     echo -e "   ✓ Bash completion: ${CYAN}/etc/bash_completion.d/webmer${NC}"
     echo
-    echo -e "${YELLOW}🚀 Quick Start:${NC}"
+    echo -e "${YELLOW} Quick Start:${NC}"
     echo -e "   1. Test installation: ${CYAN}webmer --version${NC}"
     echo -e "   2. Basic scan: ${CYAN}webmer --url https://httpbin.org/get --verbose${NC}"
     echo -e "   3. Help menu: ${CYAN}webmer --help${NC}"
     echo -e "   4. Advanced scan: ${CYAN}webmer --url https://example.com --vuln-scan${NC}"
     echo
-    echo -e "${YELLOW}📚 Documentation:${NC}"
+    echo -e "${YELLOW} Documentation:${NC}"
     echo -e "   - Configuration: ${CYAN}$INSTALL_DIR/config.yaml${NC}"
     echo -e "   - Logs: ${CYAN}$INSTALL_DIR/logs/${NC}"
     echo -e "   - Reports: ${CYAN}$INSTALL_DIR/reports/${NC}"
     echo -e "   - Sessions: ${CYAN}$INSTALL_DIR/sessions/${NC}"
     echo
-    echo -e "${RED}⚠️  IMPORTANT LEGAL NOTICE:${NC}"
+    echo -e "${RED}⚠ IMPORTANT LEGAL NOTICE:${NC}"
     echo -e "   - Only use WebMer for ${YELLOW}authorized security testing${NC}"
     echo -e "   - Always obtain ${YELLOW}proper written permission${NC} before testing"
     echo -e "   - Respect ${YELLOW}responsible disclosure practices${NC}"
     echo -e "   - Use this tool ${YELLOW}ethically and legally${NC}"
     echo
-    echo -e "${PURPLE}💻 Developer: Anas Erami${NC}"
-    echo -e "${PURPLE}📧 Email: anaserami17@gmail.com${NC}"
-    echo -e "${PURPLE}🔗 GitHub: https://github.com/anas-2003/WebMer${NC}"
+    echo -e "${PURPLE} Developer: Anas Erami${NC}"
+    echo -e "${PURPLE} Email: anaserami17@gmail.com${NC}"
+    echo -e "${PURPLE} GitHub: https://github.com/anas-2003${NC}"
     echo
-    echo -e "${GREEN}Happy Ethical Hacking! 🚀${NC}"
+    echo -e "${GREEN}Happy Ethical Hacking! ${NC}"
     echo
 }
 
