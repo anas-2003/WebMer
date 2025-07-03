@@ -1,6 +1,6 @@
 # WebMer - Real Penetration Testing Tools
 
-⚠️ **WARNING: THESE ARE REAL ATTACK TOOLS** ⚠️
+⚠️ **WARNING: THESE ARE ATTACK TOOLS** ⚠️
 
 This document describes the real, fully functional penetration testing tools integrated into WebMer. **USE ONLY WITH PROPER AUTHORIZATION!**
 
