@@ -1,0 +1,153 @@
+# =================================================================
+# WebMer v5.0 - Project Prometheus Docker Compose
+# Advanced Defense Evasion Engine Container Orchestration
+# =================================================================
+
+version: '3.8'
+
+services:
+  # Main WebMer service
+  webmer:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    image: webmer:latest
+    container_name: webmer-prometheus
+    hostname: webmer-scanner
+    
+    # Environment variables
+    environment:
+      - PYTHONUNBUFFERED=1
+      - WEBMER_CONFIG=/opt/webmer/config.yaml
+      - WEBMER_LOGS=/opt/webmer/logs
+      - WEBMER_REPORTS=/opt/webmer/reports
+      - WEBMER_SESSIONS=/opt/webmer/sessions
+    
+    # Volume mounts for persistence
+    volumes:
+      - ./sessions:/opt/webmer/sessions:rw
+      - ./logs:/opt/webmer/logs:rw
+      - ./reports:/opt/webmer/reports:rw
+      - ./config.yaml:/opt/webmer/config.yaml:ro
+      - ./brain.json:/opt/webmer/brain.json:rw
+    
+    # Network configuration
+    networks:
+      - webmer-network
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "venv/bin/python", "-c", "import webmer; print('OK')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Default command (can be overridden)
+    command: ["venv/bin/webmer", "--help"]
+
+  # Optional: Database service for advanced session management
+  database:
+    image: sqlite:3
+    container_name: webmer-database
+    volumes:
+      - ./database:/var/lib/sqlite:rw
+    networks:
+      - webmer-network
+    restart: unless-stopped
+    profiles:
+      - database
+
+  # Optional: Proxy service for traffic routing
+  proxy:
+    image: mitmproxy/mitmproxy:latest
+    container_name: webmer-proxy
+    ports:
+      - "8080:8080"  # HTTP proxy port
+      - "8081:8081"  # Web interface
+    volumes:
+      - ./proxy-certs:/home/mitmproxy/.mitmproxy:rw
+      - ./proxy-logs:/var/log/mitmproxy:rw
+    networks:
+      - webmer-network
+    command: ["mitmweb", "--web-host", "0.0.0.0", "--web-port", "8081"]
+    restart: unless-stopped
+    profiles:
+      - proxy
+
+  # Optional: Monitoring service
+  monitoring:
+    image: grafana/grafana:latest
+    container_name: webmer-monitoring
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=webmer123
+    volumes:
+      - ./monitoring/grafana-data:/var/lib/grafana:rw
+      - ./monitoring/grafana-config:/etc/grafana:ro
+    networks:
+      - webmer-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+# Network configuration
+networks:
+  webmer-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Volume definitions
+volumes:
+  webmer-sessions:
+    driver: local
+  webmer-logs:
+    driver: local
+  webmer-reports:
+    driver: local
+  webmer-database:
+    driver: local
+
+# =================================================================
+# Usage Examples:
+#
+# Basic deployment:
+#   docker-compose up -d
+#
+# With proxy support:
+#   docker-compose --profile proxy up -d
+#
+# With monitoring:
+#   docker-compose --profile monitoring up -d
+#
+# Full deployment:
+#   docker-compose --profile proxy --profile monitoring up -d
+#
+# Run a scan:
+#   docker-compose run --rm webmer webmer --url https://example.com
+#
+# Interactive shell:
+#   docker-compose run --rm webmer bash
+#
+# View logs:
+#   docker-compose logs -f webmer
+#
+# Stop services:
+#   docker-compose down
+# =================================================================

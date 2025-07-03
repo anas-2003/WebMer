@@ -1,0 +1,406 @@
+# ================================================
+# WebMer Advanced Security Platform Configuration
+# Project Prometheus - Professional Edition
+# ================================================
+
+# Global Settings
+global:
+  max_concurrent_connections: 100
+  request_timeout: 30
+  retry_attempts: 3
+  retry_delay: 1.0
+  user_agent_rotation: true
+  ssl_verify: false
+  follow_redirects: true
+  max_redirects: 10
+  enable_http2: true
+  enable_compression: true
+  max_response_size: 10485760  # 10MB
+
+# DDoS/DoS Attack Configuration
+ddos:
+  enabled: true
+  max_workers: 200
+  default_duration: 60
+  default_rps: 50
+  attack_types:
+    - http_flood
+    - slowloris 
+    - post_flood
+    - bandwidth_stress
+  
+  # Rate limiting to avoid detection
+  stealth_mode:
+    enabled: true
+    random_delays: true
+    min_delay: 0.1
+    max_delay: 2.0
+    proxy_rotation: true
+
+# Network Scanning Configuration
+network_scanning:
+  enabled: true
+  default_port_range: "1-65535"
+  common_ports: [21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143, 443, 993, 995, 1723, 3306, 3389, 5432, 5900, 8080]
+  scan_types:
+    - tcp_connect
+    - syn_scan
+    - udp_scan
+    - stealth_scan
+  
+  # Service Detection
+  service_detection:
+    enabled: true
+    banner_grabbing: true
+    version_detection: true
+    os_fingerprinting: true
+
+# SSL/TLS Security Testing
+ssl_tls:
+  enabled: true
+  comprehensive_analysis: true
+  vulnerability_tests:
+    heartbleed: true
+    poodle: true
+    beast: true
+    crime: true
+    breach: true
+    logjam: true
+    freak: true
+    sweet32: true
+  
+  cipher_analysis:
+    weak_cipher_detection: true
+    cipher_strength_evaluation: true
+    custom_cipher_testing: true
+  
+  certificate_analysis:
+    chain_validation: true
+    expiration_check: true
+    self_signed_detection: true
+    san_analysis: true
+
+# Vulnerability Scanning Modules
+vulnerability_scanning:
+  enabled: true
+  
+  # Injection Testing
+  injection_tests:
+    sql_injection:
+      enabled: true
+      error_based: true
+      blind_based: true
+      time_based: true
+      union_based: true
+      payload_count: 100
+    
+    nosql_injection:
+      enabled: true
+      mongodb_tests: true
+      couchdb_tests: true
+      
+    ldap_injection:
+      enabled: true
+      
+    command_injection:
+      enabled: true
+      time_based_detection: true
+      output_based_detection: true
+      
+    code_injection:
+      enabled: true
+      php_injection: true
+      python_injection: true
+      javascript_injection: true
+      
+    xxe_injection:
+      enabled: true
+      file_disclosure: true
+      ssrf_tests: true
+
+  # Authentication Testing
+  authentication_tests:
+    weak_passwords: true
+    session_management: true
+    jwt_vulnerabilities: true
+    csrf_testing: true
+    
+  # Configuration Testing
+  configuration_tests:
+    directory_listing: true
+    backup_files: true
+    sensitive_files: true
+    security_headers: true
+    cors_misconfiguration: true
+    
+  # Information Disclosure
+  information_disclosure:
+    error_messages: true
+    version_disclosure: true
+    path_disclosure: true
+    debug_information: true
+
+# Scanning Modules Configuration
+modules:
+  sql_injection:
+    enabled: true
+    timeout: 15
+    max_payloads: 100
+    blind_detection: true
+    time_based_delay: 5
+    union_detection: true
+    error_detection: true
+    
+  xss:
+    enabled: true
+    timeout: 10
+    max_payloads: 50
+    reflected_detection: true
+    stored_detection: true
+    dom_detection: true
+    
+  header_fuzzing:
+    enabled: true
+    timeout: 10
+    custom_headers:
+      - "X-Forwarded-For"
+      - "X-Real-IP"
+      - "X-Originating-IP"
+      - "X-Remote-IP"
+      - "X-Client-IP"
+      - "X-Forwarded-Host"
+      - "X-Forwarded-Proto"
+      
+  url_path_fuzzing:
+    enabled: true
+    timeout: 15
+    directory_traversal: true
+    file_inclusion: true
+    path_disclosure: true
+    
+  http_smuggling:
+    enabled: true
+    timeout: 20
+    techniques:
+      - "CL.TE"
+      - "TE.CL"
+      - "TE.TE"
+
+# WAF Detection and Bypass
+waf_detection:
+  enabled: true
+  signatures:
+    cloudflare:
+      headers: ["CF-RAY", "Server: cloudflare"]
+      body_patterns: ["cloudflare.com/5xx-errors"]
+    modsecurity:
+      headers: ["Server: Mod_Security"]
+      body_patterns: ["Mod_Security", "mod_security"]
+    akamai:
+      headers: ["X-Akamai-Transformed"]
+      body_patterns: ["akamai.com"]
+    incapsula:
+      headers: ["X-Iinfo"]
+      body_patterns: ["incapsula.com"]
+    sucuri:
+      headers: ["X-Sucuri-ID"]
+      body_patterns: ["sucuri.net"]
+  
+  bypass_techniques:
+    - encoding
+    - case_variation
+    - comment_insertion
+    - null_byte_injection
+    - double_encoding
+    - unicode_encoding
+    - parameter_pollution
+
+# Genetic Algorithm Settings
+genetic_algorithm:
+  enabled: true
+  population_size: 20
+  generations: 5
+  mutation_rate: 0.15
+  crossover_rate: 0.8
+  elite_selection: 0.1
+  fitness_threshold: 0.8
+
+# Q-Learning Brain Settings
+q_learning:
+  enabled: true
+  learning_rate: 0.1
+  discount_factor: 0.9
+  exploration_rate: 0.1
+  brain_file: "brain.json"
+  auto_save: true
+  update_frequency: 10
+
+# Reconnaissance Settings
+reconnaissance:
+  crawling:
+    enabled: true
+    max_depth: 5
+    max_pages: 1000
+    follow_redirects: true
+    parse_robots_txt: true
+    parse_sitemap: true
+    javascript_parsing: true
+    
+  fingerprinting:
+    enabled: true
+    technology_detection: true
+    version_detection: true
+    framework_detection: true
+    cms_detection: true
+    
+  dns_enumeration:
+    enabled: true
+    subdomains:
+      - "www"
+      - "mail"
+      - "ftp"
+      - "admin"
+      - "test"
+      - "dev"
+      - "api"
+      - "blog"
+      - "shop"
+      - "forum"
+      - "support"
+      - "help"
+      - "news"
+      - "mobile"
+      - "secure"
+      - "vpn"
+      - "remote"
+      - "portal"
+      - "dashboard"
+      - "cpanel"
+      - "webmail"
+
+# Output and Reporting
+reporting:
+  formats:
+    - "markdown"
+    - "json"
+    - "html"
+    - "xml"
+    - "csv"
+  include_screenshots: false
+  include_response_bodies: true
+  max_response_size: 10000
+  vulnerability_ratings:
+    critical: 9.0
+    high: 7.0
+    medium: 4.0
+    low: 1.0
+    info: 0.1
+  
+  report_sections:
+    executive_summary: true
+    technical_details: true
+    recommendations: true
+    proof_of_concept: true
+    risk_assessment: true
+
+# Proxy Settings
+proxy:
+  enabled: false
+  url: "http://127.0.0.1:8080"
+  verify_ssl: false
+  authentication:
+    enabled: false
+    username: ""
+    password: ""
+  
+  # Proxy rotation
+  rotation:
+    enabled: false
+    proxy_list: "proxies.txt"
+    rotation_interval: 100
+
+# Rate Limiting and Stealth
+stealth:
+  adaptive_delay: true
+  base_delay: 0.5
+  max_delay: 5.0
+  random_delay: true
+  waf_detected_delay_multiplier: 3
+  user_agents:
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    - "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    - "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0"
+    - "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:89.0) Gecko/20100101 Firefox/89.0"
+
+# API Testing
+api_testing:
+  openapi_support: true
+  swagger_support: true
+  postman_support: true
+  auto_parameter_detection: true
+  response_analysis: true
+  
+  # API-specific tests
+  api_vulnerabilities:
+    broken_authentication: true
+    excessive_data_exposure: true
+    lack_of_resources_rate_limiting: true
+    broken_function_level_authorization: true
+    mass_assignment: true
+    security_misconfiguration: true
+    injection: true
+    improper_assets_management: true
+    insufficient_logging_monitoring: true
+
+# Database Settings for Session Management
+database:
+  type: "sqlite"
+  path: "sessions/webmer.db"
+  auto_cleanup: true
+  retention_days: 30
+  encryption: true
+
+# Logging
+logging:
+  level: "INFO"
+  file: "logs/webmer.log"
+  max_size: "10MB"
+  backup_count: 5
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # Separate log files for different components
+  component_logs:
+    ddos: "logs/ddos.log"
+    network: "logs/network.log"
+    ssl_tls: "logs/ssl_tls.log"
+    vulnerabilities: "logs/vulnerabilities.log"
+
+# Performance Settings
+performance:
+  memory_limit: "1GB"
+  cpu_cores: 0  # 0 = auto-detect
+  disk_cache: true
+  cache_size: "100MB"
+  
+# Security Settings
+security:
+  sandbox_mode: false
+  safe_mode: false
+  whitelist_domains: []
+  blacklist_domains: []
+  
+# Integration Settings
+integrations:
+  shodan:
+    enabled: false
+    api_key: ""
+  
+  virustotal:
+    enabled: false
+    api_key: ""
+  
+  censys:
+    enabled: false
+    api_id: ""
+    api_secret: ""

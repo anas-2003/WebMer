@@ -1,0 +1,30 @@
+{
+    "target": "http://example.com",
+    "scan_time": "Thu Jul  3 19:16:09 2025",
+    "recon_data": {
+        "endpoints": [
+            "http://example.com"
+        ],
+        "parameters": {},
+        "js_files": [],
+        "robots": [],
+        "sitemap": [],
+        "processed_urls": [
+            "http://example.com"
+        ]
+    },
+    "tech_stack": {
+        "headers": {
+            "Server": "",
+            "X-Powered-By": "",
+            "X-AspNet-Version": "",
+            "X-Backend-Server": ""
+        },
+        "meta": {
+            "viewport": "width=device-width, initial-scale=1"
+        },
+        "scripts": []
+    },
+    "vulnerabilities": [],
+    "defense_bypass_info": {}
+}
