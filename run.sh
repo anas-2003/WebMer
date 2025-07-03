@@ -24,3 +24,4 @@ python "$PYTHON_SCRIPT" "$@"
 
 # --- Deactivate on exit ---
 deactivate
+
