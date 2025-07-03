@@ -701,42 +701,26 @@ class SmugglingModule(BaseFuzzModule):
         ]
 
     def check_vulnerability(self, response_text, response_status, baseline_content, payload):
-        # Smuggling detection is tricky. It often involves:
-        # - Timeout after the first request
-        # - Unexpected 400 Bad Request or 500 Internal Server Error (for the "smuggled" request)
-        # - Content length discrepancies (if second request causes data to be appended)
-        # - Reflecting errors from backend servers that shouldn't be seen normally
+
         
         if response_status == 400 and "Bad Request" in response_text:
             return True, f"HTTP 400 and 'Bad Request' in response, indicative of a smuggled request being rejected."
         if response_status == 500 and "Internal Server Error" in response_text:
             return True, f"HTTP 500 and 'Internal Server Error', potentially due to a smuggled request."
-        
-        # Look for signs of the second, 'smuggled' request in the response (e.g., if it hit a specific endpoint)
+
         if "Smuggled Request Processed" in response_text: # This would be a custom marker from a test app
             return True, f"Specific marker for smuggled request processing found."
         
-        # Consider time delays if the smuggled request caused a backend processing delay
-        # (needs careful baseline timing for accurate detection)
-        # This is very simplified, real smuggling detection needs careful analysis of headers, timing, etc.
+
         
         return False, None
 
     async def exploit(self, session, url, param, payload, method, params):
         print(Fore.RED + f"[*] HTTP Request Smuggling exploitation requires a deep understanding of the target's proxy chain and manual crafting. This module serves as a fuzzer for potential vulnerabilities detected via mitmproxy interaction. The payload ({payload}) indicates the *type* of smuggling attempted by the proxy, not an executable exploit string.")
         
-        # A real exploit here would involve telling mitmproxy to smuggle a specific payload
-        # (e.g., a GET request to /admin) and then analyzing the next request's response.
-        # This is beyond a simple exploit function.
-        
-        # Example of sending a "smuggled" request, conceptually
         smuggled_target_path = "/admin"
         smuggled_request_payload = f"GET {smuggled_target_path} HTTP/1.1\r\nHost: {urllib.parse.urlparse(url).netloc}\r\n\r\n"
         
-        # This is what you'd conceptually send through mitmproxy
-        # The 'payload' from get_payloads() specifies the smuggling technique
-        # and the 'smuggled_request_payload' is the actual request to be smuggled.
-        # Mitmproxy would then combine them based on the 'X-Smuggling-Payload' header.
         
         return f"HTTP Request Smuggling POC for type '{payload}'. Potential smuggled request: '{smuggled_request_payload.strip()}'. Manual verification with mitmproxy is crucial.", 0.9
 
@@ -1137,12 +1121,12 @@ class Reporter:
     @staticmethod
     def print_banner():
         banner = f"""{Fore.GREEN}
-        ████████╗███████╗███████╗███████╗██████╗ ██████╗ ██╗   ██╗██████╗ ███████╗███████╗
-        ╚══██╔══╝██╔════╝██╔════╝██╔════╝██╔══██╗██╔══██╗██║   ██║██╔══██╗██╔════╝██╔════╝
-           ██║   █████╗  ███████╗█████╗  ██████╔╝██████╔╝██║   ██║██████╔╝█████╗  ███████╗
-           ██║   ██╔══╝  ╚════██║██╔══╝  ██╔══██╗██╔══██╗██║   ██║██╔══██╗██╔══╝  ╚════██║
-           ██║   ███████╗███████║███████╗██║  ██║██║  ██║╚██████╔╝██║  ██║███████╗███████║
-           ╚═╝   ╚══════╝╚══════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝╚══════╝
+██╗    ██╗███████╗██████╗ ███╗   ███╗███████╗██████╗ 
+██║    ██║██╔════╝██╔══██╗████╗ ████║██╔════╝██╔══██╗
+██║ █╗ ██║█████╗  ██████╔╝██╔████╔██║█████╗  ██████╔╝
+██║███╗██║██╔══╝  ██╔══██╗██║╚██╔╝██║██╔══╝  ██╔══██╗
+╚███╔███╔╝███████╗███████╔╝██║ ╚═╝ ██║███████╗██║  ██║
+ ╚══╝╚══╝ ╚══════╝╚══════╝ ╚═╝     ╚═╝╚══════╝╚═╝  ╚═╝
         {Style.RESET_ALL}"""
         print(banner)
         print(f"{Fore.CYAN}{'='*60}")
