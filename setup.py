@@ -25,7 +25,7 @@ setup(
     python_requires='>=3.8',
     entry_points={
         'console_scripts': [
-            'webmer = webmer:entry_point',
+            'webmer = webmer:main_entry',
         ],
     },
 )
