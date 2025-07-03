@@ -85,7 +85,7 @@ psutil>=5.9.0
 # Text Processing and Regular Expressions
 regex>=2022.7.0
 textdistance>=4.2.0
-re2>=1.0.0
+textdistance==4.6.3
 
 # Testing Framework
 pytest>=7.0.0
